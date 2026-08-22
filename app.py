@@ -1,16 +1,16 @@
 import os
 import sqlite3
 from typing import Dict, Union
+from fastapi import FastAPI
 
-# Busca a chave do Groq que você cadastrou no Render.
-# Se estiver rodando no computador sem chave, não dará erro de execução.
+# Inicializa o servidor Web
+app = FastAPI(title="Agente Cafeteria API")
+
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
 DB_NAME = "cafeteria.db"
 
 
 def init_db() -> None:
-    """Inicializa o banco de dados e insere dados de teste se a tabela estiver vazia."""
     try:
         with sqlite3.connect(DB_NAME) as conn:
             cursor = conn.cursor()
@@ -22,7 +22,6 @@ def init_db() -> None:
                     quantidade_disponivel INTEGER NOT NULL
                 );
             """)
-
             cursor.execute("SELECT COUNT(*) FROM cardapio;")
             if cursor.fetchone()[0] == 0:
                 itens_iniciais = [
@@ -36,13 +35,25 @@ def init_db() -> None:
                     itens_iniciais
                 )
                 conn.commit()
-                print("Banco de dados inicializado com sucesso.")
     except sqlite3.Error as e:
-        print(f"Erro no banco de dados: {e}")
+        print(f"Erro no banco: {e}")
 
 
+# Inicializa o banco ao subir a aplicação
+init_db()
+
+
+@app.get("/")
+def home():
+    return {
+        "status": "online",
+        "mensagem": "API do Agente da Cafeteria está rodando!",
+        "groq_key_configurada": bool(GROQ_API_KEY)
+    }
+
+
+@app.get("/cardapio/{item_id}")
 def consultar_cardapio(item_id: int) -> Dict[str, Union[str, int, float]]:
-    """Consulta a disponibilidade de um item do cardápio pelo ID."""
     try:
         with sqlite3.connect(DB_NAME) as conn:
             conn.row_factory = sqlite3.Row
@@ -66,8 +77,8 @@ def consultar_cardapio(item_id: int) -> Dict[str, Union[str, int, float]]:
         return {"status": "erro", "mensagem": str(e)}
 
 
+@app.post("/reservar/{item_id}")
 def reservar_mesa_item(item_id: int, quantidade: int) -> Dict[str, Union[str, int]]:
-    """Reserva uma quantidade de um item do cardápio."""
     if quantidade <= 0:
         return {"status": "erro", "mensagem": "Quantidade deve ser maior que zero."}
 
@@ -95,18 +106,3 @@ def reservar_mesa_item(item_id: int, quantidade: int) -> Dict[str, Union[str, in
             }
     except sqlite3.Error as e:
         return {"status": "erro", "mensagem": str(e)}
-
-
-if __name__ == "__main__":
-    # Inicializa o banco ao rodar o script
-    init_db()
-
-    # Confirmação técnica no console
-    if GROQ_API_KEY:
-        print("Chave do Groq carregada com sucesso!")
-    else:
-        print("Aviso: Chave GROQ_API_KEY não encontrada nas variáveis de ambiente.")
-
-    # Testes locais das funções
-    print(consultar_cardapio(1))
-    print(reservar_mesa_item(1, 2))
